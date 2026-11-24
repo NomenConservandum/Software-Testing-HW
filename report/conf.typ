@@ -1,0 +1,949 @@
+/*
+ * Примечания:
+ * - Код разбит по модулям, каждый из которых объявляется и инициализируется
+ *   в переменной modules. Методы именуются в змеином стиле, при этом
+ *   приватные начинаются с подчёркивания.
+ *
+ *   В силу отсутствия адекватной реализации приватных методов в Typst
+ *   приватность --- лишь условное соглашение: такие методы не предназначены
+ *   для вызова извне, хотя фактически такая возможность имеется. Не делайте
+ *   так!
+ *
+ * - Чтобы не засорять кодовую базу, строковые константы вынесены в
+ *   переменную strings.
+ */
+
+
+#let strings = (
+  title: (
+    minobrnauki: "МИНОБРНАУКИ РОССИИ\nФедеральное государственное бюджетное образовательное учреждение\nвысшего образования\n",
+    sgu: ["САРАТОВСКИЙ НАЦИОНАЛЬНЫЙ ИССЛЕДОВАТЕЛЬСКИЙ ГОСУДАРСТВЕННЫЙ УНИВЕРСИТЕТ ИМЕНИ~Н.~Г.~ЧЕРНЫШЕВСКОГО"],
+    city: "Саратов",
+    worktypes: (
+      referat: [],
+      coursework: [КУРСОВАЯ РАБОТА],
+      diploma_bachelor: [БАКАЛАВРСКАЯ РАБОТА],
+      diploma_master: [МАГИСТЕРСКАЯ РАБОТА],
+      diploma_spec: [ДИПЛОМНАЯ РАБОТА],
+      autoref: [АВТОРЕФЕРАТ],
+      nir: [ОТЧЕТ О НАУЧНО-ИССЛЕДОВАТЕЛЬСКОЙ РАБОТЕ],
+      pract: [ОТЧЕТ О ПРАКТИКЕ],
+    ),
+    from_course: "курса",
+    from_group: "группы",
+    from_speciality: "направления",
+  ),
+  student: (
+    male: "студента",
+    female: "студентки",
+    plural: "студентов",
+  ),
+  caps_headings: (
+    [ОПРЕДЕЛЕНИЯ, ОБОЗНАЧЕНИЯ И СОКРАЩЕНИЯ],
+    [СОДЕРЖАНИЕ],
+    [ВВЕДЕНИЕ],
+    [ЗАКЛЮЧЕНИЕ],
+    [СПИСОК ИСПОЛЬЗОВАННЫХ ИСТОЧНИКОВ],
+  ),
+  specialities: (
+    spec_kb: [10.05.01 --- Компьютерная безопасность],
+    bac_ivt: [09.03.01 --- Информатика и вычислительная техника],
+    bac_moais: [02.03.03 --- Математическое обеспечение и администрирование информационных систем],
+    bac_fiit: [02.03.02 --- Фундаментальная информатика и информационные технологии],
+    bac_pi: [09.03.04 --- Программная инженерия],
+    mag_ivt: [09.04.01 --- Информатика и вычислительная техника],
+    mag_moais: [02.04.03 --- Математическое обеспечение и администрирование информационных систем],
+  ),
+  error: (
+    no_sex: [*6.21 КоАП РФ*],
+    undefined_spec: [*НЕИЗВЕСТНАЯ СПЕЦИАЛЬНОСТЬ*],
+  ),
+)
+
+// Переменная отвечающая за размер отступа красной строки
+#let indent = 1.25cm
+#let main_font = "Libertinus Serif"
+#let font_size = 14pt
+#let figure_font_size = font_size - 2pt
+// Отступы вокруг таблиц и рисунков
+#let figure_spacing = (
+  table: (above: 10pt, below: 10pt, gap: 6pt),
+  image: (above: 15pt, below: 24pt, gap: 7.5pt),
+)
+// #let linespace = font_size
+#let line_spacing = 1.75em / 2
+#let styled = [#set text(red)].func()
+#let space = [ ].func()
+#let sequence = [].func()
+
+// Включена ли нумерация по разделам (settings.sec_numbering.enabled)
+#let sec_numbering = state("sec_numbering", false)
+
+// Виды фигур, нумерация которых ведётся в пределах раздела
+#let section_figure_kinds = (image, table)
+
+// Счётчики, которые при нумерации по разделам сбрасываются в начале раздела
+#let section_counters = (
+  section_figure_kinds.map(kind => figure.where(kind: kind)) + (math.equation,)
+)
+
+/*
+ * Проверяет, находится ли точка документа в ненумерованном разделе
+ * (введение, заключение)
+ * Принимает:
+ *  - loc - расположение
+ */
+#let in_unnumbered_section(loc) = {
+  let headings = query(heading.where(level: 1).before(loc))
+  headings.len() == 0 or headings.last().numbering == none
+}
+
+/*
+ * Сбрасывает счётчики фигур и формул в начале раздела. Ненумерованные
+ * разделы (введение, заключение и т. п.) имеют общую сквозную нумерацию 0.x,
+ * чтобы номера, например, во введении и заключении не повторялись.
+ * Принимает:
+ *  - it - заголовок первого уровня
+ */
+#let reset_section_counters(it) = context {
+  for key in section_counters {
+    let start = 0
+    if it.numbering == none {
+      start = query(selector(key).before(here()))
+        .filter(el => el.numbering != none)
+        .filter(el => el.func() != math.equation or el.block)
+        .filter(el => in_unnumbered_section(el.location()))
+        .len()
+    }
+    counter(key).update(start)
+  }
+}
+
+#let annex-letters = "АБВГДЕЖЗИКЛМНПРСТУФХЦШЩЭЮЯABCDEFGHJKLMNPQRSTUVWXYZ"
+#let annex-numbering(..nums) = {
+  let number = nums.pos().first() - 1
+  annex-letters.clusters().at(number, default: str(number))
+}
+
+/*
+ * Формирует номер фигуры или формулы
+ * Принимает:
+ *  - loc - расположение фигуры или формулы
+ *  - n - её порядковый номер
+ * Возвращает:
+ *  - номер вида N.x, где N равен 0 для ненумерованных разделов
+ *    (введение, заключение и т. п., нумерация в них сквозная), номеру
+ *    раздела для обычных разделов и букве для приложений
+ * Примечание: номер раздела вычисляется по месту элемента, поэтому функция
+ * используется и в подписи, и в ссылках.
+ */
+#let section_number(loc, n) = {
+  if in_unnumbered_section(loc) {
+    return "0." + str(n)
+  }
+  let section = counter(heading).at(loc).first()
+  if state("annex", false).at(loc) {
+    return annex-numbering(section) + "." + str(n)
+  }
+  str(section) + "." + str(n)
+}
+
+/*
+ * Выводит ссылку на фигуру или формулу. Нужна потому, что функция нумерации
+ * при ссылке вычисляется в контексте ссылки, а номер раздела нужно брать по
+ * месту самого элемента.
+ */
+#let section_ref(it) = {
+  let el = it.element
+  if el == none or el.numbering == none {
+    return it
+  }
+  let loc = el.location()
+  let number = none
+  if el.func() == figure {
+    number = section_number(loc, el.counter.at(loc).first())
+  } else if el.func() == math.equation {
+    number = "(" + section_number(loc, counter(math.equation).at(loc).first()) + ")"
+  } else {
+    return it
+  }
+  let supplement = if it.supplement == auto { el.supplement } else { it.supplement }
+  if supplement not in (none, []) {
+    number = [#supplement~#number]
+  }
+  link(loc, number)
+}
+
+/*
+ * Список литературы в стиле ugost2003. CSL не умеет того, что делает
+ * ugost2003.bst, поэтому ugost2003.csl расставляет служебные символы
+ * U+E000--U+E008, а эти правила доделывают запись:
+ * - первый автор в заголовке записи остаётся только при одном--трёх авторах;
+ * - «/ все авторы» остаются только при двух и более авторах;
+ * - перед редакторами ставится «/» или «;».
+ */
+#let ugost-head = regex("\u{E006}(\d*)\u{E007}([^\u{E008}]*)\u{E008}")
+#let ugost-authors = regex("\u{E000}(\d*)\u{E001}([^\u{E002}]*)\u{E002}(\u{E003})?(\.)?|\u{E003}")
+#let ugost-thesis = regex(
+  "([\u{E004}\u{E005}])(Doctoral dissertation|Master['’]s thesis|phdthesis|mathesis|docthesis)?",
+)
+#let ugost-thesis-types = (
+  "\u{E004}": (phd: "дис. … канд. наук", ma: "квалификационная работа магистра", doc: "дис. … д-ра наук"),
+  "\u{E005}": (phd: "Ph.\u{202F}D. thesis", ma: "Master's thesis", doc: "Dr.\u{202F}Sci. dissertation"),
+)
+
+#let ugost-bibliography(it) = {
+  show ugost-head: m => {
+    let (count, first) = m.text.match(ugost-head).captures
+    let count = int("0" + count)
+    if count < 1 or count > 3 { "" } else if first.ends-with(".") { first + " " } else { first + ". " }
+  }
+  show ugost-authors: m => {
+    let (count, rest, editors, dot) = m.text.match(ugost-authors).captures
+    let full = count != none and int("0" + count) > 1
+    // В английских записях CSL ставит «&» вместо «and»
+    let rest = if full { rest.replace(" & ", " and ") } else { "" }
+    let editors = editors != none or count == none
+    // Точку после авторов служебный символ отделяет от их последнего
+    // инициала, поэтому она схлопывается здесь, а не правилом для тире
+    let dot = if dot == none or rest.ends-with(".") { "" } else { "." }
+    rest + if editors { if full { "\u{A0}; " } else { "\u{A0}/ " } } + dot
+  }
+  show ugost-thesis: m => {
+    let (lang, type) = m.text.match(ugost-thesis).captures
+    let types = ugost-thesis-types.at(lang)
+    if type == none { "" } else if type in ("Doctoral dissertation", "phdthesis") { types.phd } else if (
+      type == "docthesis"
+    ) { types.doc } else { types.ma }
+  }
+  // Тире между областями описания как \BibDash: пробелы по 0.2em, которые не
+  // растягиваются при выравнивании, и без переноса перед тире.
+  show regex("\.{0,2}\u{A0}— "): m => [#if m.text.starts-with(".") [.]#sym.wj#h(.2em)#sym.wj—#h(.2em, weak: true)]
+  // Неразрывный пробел между инициалами
+  show regex("\p{Lu}\. \p{Lu}"): m => m.text.replace(" ", "\u{A0}")
+  show link: set text(font: "DejaVu Sans Mono", size: 0.8em, hyphenate: false)
+  set par(spacing: line_spacing + 6pt)
+  set block(above: line_spacing)
+  it
+}
+
+#let modules = (
+  /*
+   * Модуль информации об авторе. Позволяет получать более полную и
+   * отформатированную информацию об авторе: студент/студентки/студентов
+   * (get_author_sex), номер курса, группы и так далее. Конечно, некоторые из
+   * этих вещей в открытом виде лежат в словаре author, но некоторые данные
+   * нуждаются в постобработке или вовсе получаются косвенным путём.
+   * Необходимость в постобработке может возникнуть и позднее, поэтому
+   * настоятельно рекомендуется пользоваться именно этими методами, а не
+   * получать код напрямую.
+   */
+  author_info: (
+    /*
+     * Определяет студенческо-половую сущность автора.
+     * Принимает:
+     *  - author - словарь про автора
+     * Возвращает:
+     *  - В зависимости от пола: "студента", "студентки", "студентов"
+     */
+    get_author_sex: author => {
+      return strings.student.at(
+        author.at("sex"),
+        default: strings.error.no_sex,
+      )
+    },
+    /*
+     * Определяет курс автора (по номеру группы)
+     * Принимает:
+     *  - author - словарь про автора
+     * Возвращает:
+     *  - Номер курса в строковом формате
+     */
+    get_author_course: author => {
+      return author.group.at(0)
+    },
+    /*
+     * Определяет группу автора
+     * Принимает:
+     *  - author - словарь про автора
+     * Возвращает:
+     *  - Номер группы в строковом формате
+     * Примечание: на текущий момент функция ничего не делает, но, возможно,
+     * это не навсегда и в будущем здесь что-то может появиться. Чтобы потом не
+     * мучиться с рефакторингом, лучше получать номер группы через неё.
+     */
+    get_author_group: author => {
+      return author.group
+    },
+    /*
+     * Определяет код и название направления автора
+     * Принимает:
+     *  - author - словарь про автора
+     * Возвращает:
+     *  - author.speciality, если таковой указан
+     *  - В противном случае, если студент учится на КНиИТе, для студента
+     *    работает аттракцион невиданной технологичности: код и название
+     *    специальности определяются автоматически
+     */
+    get_speciality: author => {
+      if author.at("speciality", default: none) != none {
+        return author.speciality
+      } else if author.faculty == [КНиИТ] {
+        let specialities = (
+          strings.specialities.bac_fiit,
+          strings.specialities.bac_ivt,
+          strings.specialities.spec_kb,
+          strings.specialities.bac_moais,
+          strings.specialities.bac_pi,
+          [], // x6x
+          strings.specialities.mag_ivt,
+          strings.specialities.mag_moais,
+          [], // x8x
+        )
+        if author.group.at(1) == "7" {
+          // x7x
+          if author.group.at(2) == "1" {
+            // x71
+            return specialities.at(6) // ивт
+          } else if author.group.at(2) == "3" {
+            // x73
+            return specialities.at(7) // моаис
+          }
+          return []
+        }
+        let id = int(author.group.at(1)) - 1
+
+        if id < 0 or id > 8 {
+          return []
+        }
+        return specialities.at(id)
+      }
+      return strings.error.undefined_spec
+    },
+  ),
+  /*
+   * Модуль информации о практике.
+   */
+  pract_info: (
+    /* Генерирует строку с продолжительностью практики.
+     * Если заданы start_date и finish_date, a duration_weeks нет,
+     * то она вычисляется автоматически
+     * Принимает:
+     *  - start_date - дата начала, строка вида ДД.ММ.ГГГГ
+     *  - finish_date - дата окончания, строка вида ДД.ММ.ГГГГ
+     *  - finish_date - дата окончания, строка вида ДД.ММ.ГГГГ
+     * Возвращает:
+     *   строку вида "X нед."
+     */
+    get_duration_weeks: (self, pract) => {
+      let weeks = if (pract.duration_weeks == none) {
+        if (pract.start_date != none and pract.finish_date != none) {
+          let start = (self.utils.parse_date)(pract.start_date)
+          let finish = (self.utils.parse_date)(pract.finish_date)
+          calc.floor((finish - start + duration(days: 1)).weeks())
+        } else {
+          ""
+        }
+      } else {
+        pract.duration_weeks
+      }
+      return str(weeks) + " нед."
+    },
+  ),
+  /*
+   * Модуль титульного листа. Здесь происходит генерация титульного листа и
+   * определяются все необходимые для этого методы. Поскольку его создание ---
+   * задача не такая уж и тривиальная, здесь есть много приватных методов и ваш
+   * покорный слуга ещё раз напоминает о нежелательности их вызова извне. Если
+   * такая необходимость всё же возникает, лучше переименовать метод и убрать
+   * подчёркивание: впоследствии это можно будет хотя бы как-то отладить.
+   *
+   * Изначально задумывалось, что единственный доступный для вызова извне метод
+   * --- make, а в остальных не должно возникнуть необходимости.
+   */
+  title: (
+    /*
+     * Отвечает за вывод названия министерства и
+     * университета на титульном листе
+     */
+    _default_header: () => {
+      set align(center)
+      // set text(font: "Tempora")
+      text(strings.title.minobrnauki)
+      v(0.2em)
+      text(weight: "bold", strings.title.sgu)
+      set align(left)
+    },
+    /*
+     * Отвечает за вывод названия кафедры на титульном листе
+     */
+    _default_chair: (self, info, data) => {
+      let chair = "Кафедра"
+      let show_chair = data.chair != none and info.type == "coursework"
+      let chair_string = if data.chair != none {
+        (self.utils.strglue)(chair, data.chair)
+      } else {
+        chair
+      }
+      let chair_block = align(center, {
+        text(chair_string)
+      })
+      if info.type == "coursework" or info.type == "diploma" {
+        chair_block
+      } else {
+        hide(chair_block)
+      }
+    },
+    /*
+     * Отвечает за вывод тела титульного листа: заголовок (название работы,
+     * если не определено иное), тип работы, информация об авторе
+     *
+     * Информация о проверяющем преподавателе генерируется не здесь по
+     * историческим причинам.
+     */
+    _default_body: (self, info, data) => {
+      if (info.type == "pract") {
+        set align(center)
+        text(weight: "bold", upper(data.title))
+        v(1cm)
+        set align(left)
+        text(data.group + " " + data.faculty + "\n")
+        text(data.author + "\n")
+        v(0.4cm)
+        text("вид практики: " + data.pract.type + "\n")
+        text("кафедра: " + data.chair + "\n")
+        text("курс: " + data.pract.course + "\n")
+        text("семестр: " + data.pract.term + "\n")
+        text(
+          "продолжительность: "
+            + data.pract.duration_weeks
+            + ", c "
+            + data.pract.start_date
+            + " по "
+            + data.pract.finish_date
+            + "\n",
+        )
+      } else {
+        set align(center)
+        text(weight: "bold", upper(data.title))
+        if data.worktype != [] {
+          v(0.3em)
+          par(data.worktype)
+        }
+        v(2.1cm)
+        set align(left)
+        text(data.group + "\n")
+        text(data.speciality + "\n")
+        text(data.faculty + "\n" + data.author)
+      }
+    },
+    /*
+     * Отвечает за вывод города и года на титульном листе
+     */
+    _default_footer: () => {
+      set align(center)
+      text(strings.title.city + " " + str(datetime.today().year()))
+    },
+    /*
+     * Подпись для титульного листа
+     */
+    _signature: (annotation, post, name) => {
+      annotation
+      v(line_spacing, weak: true)
+      grid(
+        columns: (7cm, 3cm, 6cm),
+        column-gutter: 0.25em,
+        align: (left, center + bottom, right),
+        post, box(line(length: 3cm, stroke: .4pt)), name,
+      )
+    },
+    /*
+     * Блок подписей для титульного листа
+     */
+    _default_signatures: (self, info, data) => {
+      let inspector_annotation = if (info.type == "referat") {
+        "Проверено:"
+      } else if (info.type == "coursework" or info.type == "diploma") {
+        "Научный руководитель"
+      } else if (info.type == "pract") {
+        "Руководитель практики от университета,"
+        v(12pt)
+      }
+      (self.title._signature)(inspector_annotation, data.inspector.degree, data.inspector.name)
+      v(14pt)
+
+      if (info.type == "coursework" or info.type == "diploma") {
+        (self.title._signature)("Заведующий кафедрой", data.chair_head.degree, data.chair_head.name)
+      }
+      if (info.type == "pract") {
+        (self.title._signature)(
+          [Руководитель практики от организации (учреждения, предприятия),#v(12pt)],
+          data.pract.inspector.degree,
+          data.pract.inspector.name,
+        )
+      }
+    },
+    _default_pactice_approved: data => {
+      align(right, box(align(left)[
+        УТВЕРЖДАЮ#linebreak()
+        Зав. кафедрой,#linebreak()
+        #data.chair_head.degree#linebreak()
+        #box(line(length: 3.9cm, stroke: .4pt)) #text(data.chair_head.name)
+      ]))
+    },
+    _default_pract_title_page: info => {
+      let title = info.at("title", default: none)
+      v(11.8cm)
+      par(
+        justify: true,
+        first-line-indent: (amount: indent, all: true),
+      )[Тема практики:"#title"]
+    },
+    /*
+     * Строка "студента такой-то группы" для титульного листа
+     */
+    _get_author_string: (self, author) => {
+      let sex = (self.author_info.get_author_sex)(author)
+      let course = (self.author_info.get_author_course)(author)
+      let group = (self.author_info.get_author_group)(author)
+      if course.len() > 0 {
+        course = (self.utils.strglue)(course, strings.title.from_course)
+      }
+      if group.len() > 0 {
+        group = (self.utils.strglue)(group, strings.title.from_group)
+      }
+      let result = (self.utils.strglue)(sex, course, group)
+      return result
+    },
+    /*
+     * Генерирует тип работы.
+     * Принимает:
+     *  - info - информация о документе
+     * Возвращает:
+     *  - Cтроку с типом работы для вывода на титульник
+     */
+    _get_worktype_string: info => {
+      let worktypes = strings.title.worktypes
+      if info.type == "diploma" {
+        let author = info.at("author", default: (:))
+        let grade = author.at("grade", default: none)
+        if grade == "master" { return worktypes.diploma_master }
+        if grade == "spec" { return worktypes.diploma_spec }
+        return worktypes.diploma_bachelor
+      }
+      return worktypes.at(info.type, default: [])
+    },
+    /*
+     * Генерирует заголовок титульного листа.
+     * Принимает:
+     *  - info - информация о документе
+     *  - worktype - тип работы для вывода на титульник
+     * Возвращает:
+     *  - В зависимости от типа:
+     *    - Тему работы, если это не автореферат, не отчёт по НИРу
+     *      или отчет о практике
+     *    - В противном случае названия соответствующих типов работ
+     */
+    _get_title_string: (info, worktype) => {
+      if ("autoref", "nir", "pract").contains(info.type) {
+        return worktype
+      }
+      return info.at("title", default: [Тема работы])
+    },
+    /*
+     * Генерирует строки текста для вывода на титульном листе
+     * Принимает:
+     *  - info - информация о документе
+     * Возвращает:
+     *  - Словарь:
+     *     title: заголовок
+     *     worktype: тип работы
+     *     group: студент(а|ки|ов) s курса sex группы
+     *     specialty: направления 69.14.88 --- Специальность
+     *     faculty: факультета XXX
+     *     author: автор(ы)? работы
+     *     chair: название кафедры
+     *     chair_head: информация о зав. кафедрой
+     *     inspector: информация о проверяющем (научном руководителе)
+     *     pract: данные о практике
+     */
+    _get_strings: (self, info) => {
+      let author = info.at("author", default: (:))
+      let worktype = (self.title._get_worktype_string)(info)
+      let title_string = (self.title._get_title_string)(info, worktype)
+      let group_string = (self.title._get_author_string)(self, author)
+      let speciality_string = (self.utils.strglue)(
+        strings.title.from_speciality,
+        (self.author_info.get_speciality)(author),
+      )
+      let faculty_string = "факультета " + author.faculty
+
+      let chair = info.at("chair", default: none)
+      let chair_head = info.at("chair_head", default: (:))
+      let chait_head_info = (
+        degree: chair_head.at("degree", default: none),
+        name: chair_head.at("name", default: none),
+      )
+
+      let inspector = info.at("inspector", default: (:))
+      let inspector_info = (
+        degree: inspector.at("degree", default: none),
+        name: inspector.at("name", default: none),
+      )
+
+      let pract_info = (:)
+      if info.type == "pract" {
+        let pract = info.at("pract", default: (:))
+        pract_info = (
+          type: pract.at("type", default: none),
+          term: pract.at("term", default: none),
+          course: (self.author_info.get_author_course)(author),
+          duration_weeks: pract.at("duration_weeks", default: none),
+          start_date: pract.at("start_date", default: none),
+          finish_date: pract.at("finish_date", default: none),
+        )
+        pract_info.duration_weeks = (self.pract_info.get_duration_weeks)(
+          self,
+          pract_info,
+        )
+        if pract_info.term != none {
+          pract_info.term = str(pract_info.term)
+        }
+        pract_info.start_date += " г."
+        pract_info.finish_date += " г."
+
+        let pract_inspector = pract.at("inspector", default: none)
+        pract_info.inspector = (
+          degree: pract_inspector.at("degree", default: none),
+          name: pract_inspector.at("name", default: none),
+        )
+      }
+
+      return (
+        title: title_string,
+        worktype: worktype,
+        group: group_string,
+        speciality: speciality_string,
+        faculty: faculty_string,
+        author: author.name,
+        chair: chair,
+        chair_head: chait_head_info,
+        inspector: inspector_info,
+        pract: pract_info,
+      )
+    },
+    /*
+     * Генерирует титульный лист
+     * Принимает:
+     *  - info - информация о документе
+     */
+    make: (self, info) => {
+      let strs = (self.title._get_strings)(self, info)
+      (self.title._default_header)()
+      v(0.5em)
+      (self.title._default_chair)(self, info, strs)
+
+      if (info.type == "pract") {
+        v(0.9cm)
+        (self.title._default_pactice_approved)(strs)
+        v(2.3cm)
+        (self.title._default_body)(self, info, strs)
+        v(0.9cm)
+        v(1fr)
+        (self.title._default_signatures)(self, info, strs)
+        v(1fr)
+        pagebreak()
+        (self.title._default_pract_title_page)(info)
+      } else {
+        v(2cm)
+        (self.title._default_body)(self, info, strs)
+        v(1fr)
+        (self.title._default_signatures)(self, info, strs)
+        v(1fr)
+        (self.title._default_footer)()
+      }
+    },
+  ),
+  /*
+   * Модуль генерации документа. Здесь содержатся методы, влияющие на вид всего
+   * документа в целом. Главный из них --- make --- вызывается из точки входа в
+   * стилевой файл и отвечает за всё оформление выходного документа.
+   */
+  document: (
+    apply_heading_styles: it => {
+      set text(size: font_size)
+      if it.depth == 1 {
+        pagebreak(weak: true)
+        context if sec_numbering.get() {
+          reset_section_counters(it)
+        }
+      }
+      if strings.caps_headings.contains(it.body) {
+        align(center, it.body)
+      } else {
+        pad(left: indent, it)
+      }
+      v(line_spacing / 2)
+    },
+    /*
+     * Генерирует страницу содержания
+     * Принимает:
+     *  - info - информация о документе
+     */
+    make_toc: (info: ()) => {
+      show outline.entry.where(level: 1): it => {
+        let heading-text = it.at("element", default: (:)).at("body", default: "")
+
+        let is-outlined = it.element.outlined
+        let is-annex = state("annex", false).at(it.element.location())
+        let is-caps = heading-text in strings.caps_headings
+
+        // TODO: Хотелось бы запретить создавать ненумерованные заголовки. По
+        // какой-то причине это не срабаотывает для самого заголовка содержания. Не
+        // понятно почему оно сюда вообще попадает.
+        // assert(is-caps or (not is-outlined) or it.element.numbering != none)
+
+        if (not (is-annex or is-caps)) {
+          return it
+        }
+
+        assert(is-annex or is-caps)
+        let prefix = none
+        if is-annex {
+          prefix = [ПРИЛОЖЕНИЕ #it.prefix() #heading-text]
+        } else if is-caps {
+          prefix = heading-text + sym.space
+        }
+        link(
+          it.element.location(),
+          it.indented(
+            none,
+            prefix + sym.space + box(width: 1fr, it.fill) + sym.space + sym.wj + it.page(),
+          ),
+        )
+      }
+      outline(title: [СОДЕРЖАНИЕ])
+    },
+    /*
+     * Генерирует весь документ
+     * Принимает:
+     *  - info - информация о документе
+     *  - settings - настройки документе
+     *  - doc  - содержимое документа
+     */
+    make: (self, info: (), settings, doc) => {
+      set page(
+        paper: "a4",
+        margin: (
+          top: 2cm,
+          bottom: 2cm,
+          left: 2.5cm,
+          right: 1.5cm,
+        ),
+      )
+      set text(size: font_size, lang: "ru", font: main_font)
+
+      if settings.title_page.at("enabled", default: true) {
+        (self.title.make)(self, info)
+      }
+
+      show heading: self.document.apply_heading_styles
+      set raw(theme: none)
+
+      set par(
+        // Выравнивание по ширине
+        justify: true,
+        // отвечает за красные строки там, где их нет, но они должны быть
+        first-line-indent: (amount: indent, all: true),
+      )
+
+      // Вывод содержания
+      if settings.contents_page.enabled {
+        (self.document.make_toc)(info: info)
+      }
+
+      // Оформление элементов содержимого документа
+      set ref(supplement: none)
+      set heading(numbering: "1.1", hanging-indent: -indent)
+      set page(
+        footer: context [
+          #h(1fr)
+          #counter(page).display("1")
+        ],
+      )
+      set page(numbering: "1")
+      set math.equation(numbering: "(1)")
+
+      set table(stroke: 0.5pt)
+      show table: set par(first-line-indent: 0pt, justify: false)
+      show figure.caption: set par(first-line-indent: 0pt)
+
+      // Нумерация рисунков, таблиц и формул по разделам
+      let sec_numbering_enabled = settings.sec_numbering.at("enabled", default: false)
+      sec_numbering.update(sec_numbering_enabled)
+      set figure(numbering: n => context section_number(here(), n)) if sec_numbering_enabled
+      set math.equation(
+        numbering: n => context "(" + section_number(here(), n) + ")",
+      ) if sec_numbering_enabled
+      show ref: it => if sec_numbering_enabled { section_ref(it) } else { it }
+      set figure.caption(separator: [ -- ])
+      show figure.caption: set text(size: figure_font_size)
+
+      show figure.where(kind: image): set figure(supplement: "Рисунок")
+      show figure.where(kind: table): set figure.caption(position: top)
+      show figure.where(kind: table): set text(size: figure_font_size)
+      show figure.where(kind: table): set align(left)
+      show figure.where(kind: table): set block(breakable: true)
+
+      // Нижний отступ задаётся явным v(), чтобы он складывался с верхним отступом
+      // следующей фигуры.
+      show figure.where(kind: table): set block(above: figure_spacing.table.above, below: 0pt)
+      show figure.where(kind: image): set block(above: figure_spacing.image.above, below: 0pt)
+      show figure.where(kind: table): set figure(gap: figure_spacing.table.gap)
+      show figure.where(kind: image): set figure(gap: figure_spacing.image.gap)
+      show figure.where(kind: table): it => {
+        it
+        v(figure_spacing.table.below)
+      }
+      show figure.where(kind: image): it => {
+        it
+        v(figure_spacing.image.below)
+      }
+
+      set terms(separator: [ --- ])
+
+      set quote(block: true)
+
+      set bibliography(title: "СПИСОК ИСПОЛЬЗОВАННЫХ ИСТОЧНИКОВ")
+      set bibliography(style: "ugost2003.csl")
+      show bibliography: ugost-bibliography
+
+      // Примерный размер "---". Определено на глаз, как сделать более точным
+      // не разбирался.
+      let shift-back-list = 1.5em
+      set list(indent: indent - shift-back-list, marker: [#strong([---])])
+      let shift-back-enum = 1.25em
+      set enum(indent: indent - shift-back-enum)
+
+      // Вывод самого документа
+      doc
+    },
+  ),
+  /*
+   * Помощник. Модуль-помощник не содержит особой функциональности и не имеет
+   * конкретного назначения, но содержащиеся в нём методы могут быть полезны
+   * где угодно и не привязаны к конкретной части документа
+   */
+  utils: (
+    /*
+     * Склеивает строки, игнорируя пустые
+     * Принимает:
+     *  - divider - разделитель (по умолчанию пробел)
+     *  - соединяемые строки в неограниченном количестве
+     * Примечание: метод похож по своей сути на join, но отличается от него
+     * наличием проверки на пустые строки: рядом с ними разделитель не
+     * ставится, что исключает присутствие двух разделителей подряд.
+     */
+    strglue: (divider: " ", ..strings) => {
+      let result = ""
+      for string in strings.pos() {
+        if (
+          (result.len() > 0) and ((type(string) != str) or (string.len() > 0))
+        ) {
+          result = result + " "
+        }
+        // TODO: string было бы неплохо обернуть в str(), но баг в системе
+        // типов Typst не позволяет этого сделать
+        result = result + string
+      }
+      return result
+    },
+    /*
+     * Рабирает строку вида ДД.ММ.ГГГГ в datetime
+     */
+    parse_date: string => {
+      let (d, m, y) = string.split(".").map(int)
+      datetime(year: y, month: m, day: d)
+    },
+  ),
+)
+
+#let chairs = (
+  cyb: "математической кибернетики и компьютерных наук",
+  kb: "теоретических основ компьютерной безопасности и криптографии ",
+  sau: "системного анализа и автоматического управления",
+  info_prog: "информатики и программирования",
+  diskr: "дискретной математики и информационных технологий",
+)
+
+#let defabbr = {
+  heading(
+    numbering: none,
+    outlined: true,
+    [ОПРЕДЕЛЕНИЯ, ОБОЗНАЧЕНИЯ И СОКРАЩЕНИЯ],
+  )
+}
+
+#let intro = {
+  heading(numbering: none, outlined: true, [ВВЕДЕНИЕ])
+}
+
+
+#let conclusion = {
+  heading(numbering: none, outlined: true, [ЗАКЛЮЧЕНИЕ])
+}
+
+// thx https://github.com/typst-g7-32/modern-g7-32
+#let annexes-start(it) = {
+  set heading(
+    numbering: annex-numbering,
+    outlined: true,
+  )
+  set align(center)
+
+  show heading: it => {
+    if it.depth == 1 {
+      pagebreak(weak: true)
+      context if sec_numbering.get() {
+        reset_section_counters(it)
+      }
+    }
+    set text(size: font_size)
+    let letter = counter(heading).display(annex-numbering)
+    [ПРИЛОЖЕНИЕ #letter \ #it.body #v(line_spacing / 2)]
+  }
+
+  state("annex").update(true)
+  counter(heading).update(0)
+
+  it
+}
+
+// TODO: по какой-то причине эта функция всегда вставляет пустую строку в конце
+#let source-file(file) = {
+  raw(read(file), block: true)
+}
+
+/*
+ * Точка входа, просто вызывает modules.document.make
+ */
+#let conf(
+  title: none,
+  info: (:),
+  type: "referat",
+  settings: (),
+  doc,
+) = {
+  info.title = title
+  info.type = type
+  settings.title_page = settings.at("title_page", default: (:))
+  settings.sec_numbering = settings.at("sec_numbering", default: (:))
+  (modules.document.make)(
+    modules,
+    info: info,
+    settings,
+    [
+      #doc
+    ],
+  )
+}
