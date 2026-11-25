@@ -44,12 +44,12 @@ class CartPage(BasePage):
         self.clear_button = BaseElement(
             page,
             ".remove_all_basket:visible",
-            "Кнопка «Очистить» корзину",
+            "Кнопка "Очистить" корзину",
         )
         self.checkout_button = BaseElement(
             page,
             "[data-entity='basket-checkout-button']:visible",
-            "Кнопка «Перейти к оформлению»",
+            "Кнопка "Перейти к оформлению"",
         )
 
     @allure.step("Открыть корзину /basket/")

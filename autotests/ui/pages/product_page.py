@@ -33,12 +33,12 @@ class ProductPage(BasePage):
         self.add_to_cart_button = BaseElement(
             page,
             ".catalog_detail .to-cart:visible",
-            "Кнопка «В корзину»",
+            "Кнопка "В корзину"",
         )
         self.in_cart_link = BaseElement(
             page,
             ".catalog_detail a.in-cart",
-            "Кнопка/ссылка «В корзине»",
+            "Кнопка/ссылка "В корзине"",
         )
 
     @allure.step("Проверить данные карточки товара")
@@ -73,7 +73,7 @@ class ProductPage(BasePage):
             return self
         self.add_to_cart_button.click()
         self.in_cart_link.wait_visible()
-        log.info("Товар добавлен в корзину, отобразился индикатор «В корзине»")
+        log.info("Товар добавлен в корзину, отобразился индикатор "В корзине"")
         return self
 
     @allure.step("Перейти в корзину")

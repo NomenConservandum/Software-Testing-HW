@@ -24,7 +24,7 @@ class LoginPage(BasePage):
         self.submit_button = BaseElement(
             page,
             "#auth-page-form button[type='submit'][name='Login1']",
-            "Кнопка «Войти»",
+            "Кнопка "Войти"",
         )
         self.client_error_label = BaseElement(
             page,

@@ -12,7 +12,7 @@ from ui.pages.login_page import LoginPage
 
 
 @allure.epic("Сквозной сценарий")
-@allure.feature("Покупка товара из раздела «Линолеум»")
+@allure.feature("Покупка товара из раздела "Линолеум"")
 @pytest.mark.e2e
 def test_e2e_purchase_flow(
     login_page: LoginPage,

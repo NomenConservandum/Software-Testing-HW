@@ -179,8 +179,8 @@
  * ugost2003.bst, поэтому ugost2003.csl расставляет служебные символы
  * U+E000--U+E008, а эти правила доделывают запись:
  * - первый автор в заголовке записи остаётся только при одном--трёх авторах;
- * - «/ все авторы» остаются только при двух и более авторах;
- * - перед редакторами ставится «/» или «;».
+ * - "/ все авторы" остаются только при двух и более авторах;
+ * - перед редакторами ставится "/" или ";".
  */
 #let ugost-head = regex("\u{E006}(\d*)\u{E007}([^\u{E008}]*)\u{E008}")
 #let ugost-authors = regex("\u{E000}(\d*)\u{E001}([^\u{E002}]*)\u{E002}(\u{E003})?(\.)?|\u{E003}")
@@ -201,7 +201,7 @@
   show ugost-authors: m => {
     let (count, rest, editors, dot) = m.text.match(ugost-authors).captures
     let full = count != none and int("0" + count) > 1
-    // В английских записях CSL ставит «&» вместо «and»
+    // В английских записях CSL ставит "&" вместо "and"
     let rest = if full { rest.replace(" & ", " and ") } else { "" }
     let editors = editors != none or count == none
     // Точку после авторов служебный символ отделяет от их последнего
@@ -218,7 +218,7 @@
   }
   // Тире между областями описания как \BibDash: пробелы по 0.2em, которые не
   // растягиваются при выравнивании, и без переноса перед тире.
-  show regex("\.{0,2}\u{A0}— "): m => [#if m.text.starts-with(".") [.]#sym.wj#h(.2em)#sym.wj—#h(.2em, weak: true)]
+  show regex("\.{0,2}\u{A0}--- "): m => [#if m.text.starts-with(".") [.]#sym.wj#h(.2em)#sym.wj---#h(.2em, weak: true)]
   // Неразрывный пробел между инициалами
   show regex("\p{Lu}\. \p{Lu}"): m => m.text.replace(" ", "\u{A0}")
   show link: set text(font: "DejaVu Sans Mono", size: 0.8em, hyphenate: false)

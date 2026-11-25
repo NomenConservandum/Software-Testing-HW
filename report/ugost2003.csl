@@ -14,10 +14,10 @@
 
       Работает только вместе с show-правилом из conf.typ. CSL не умеет
       проверять число авторов, поэтому стиль окружает первого автора в
-      заголовке записи (U+E006–U+E008) и часть «/ все авторы» (U+E000–U+E003)
+      заголовке записи (U+E006–U+E008) и часть "/ все авторы" (U+E000–U+E003)
       служебными символами и выводит число авторов. Show-правило оставляет
-      первого автора в заголовке при одном–трёх авторах, а «/ все авторы» —
-      при двух и более, как ugost2003. Оно же заменяет «&amp;» на «and» в
+      первого автора в заголовке при одном–трёх авторах, а "/ все авторы" ---
+      при двух и более, как ugost2003. Оно же заменяет "&amp;" на "and" в
       английских записях,
       переводит тип диссертации (U+E004, U+E005), убирает двойную точку
       перед тире и ставит неразрывные пробелы между инициалами.
@@ -104,8 +104,8 @@
   </macro>
 
   <!-- Тип диссертации. U+E004 (русская запись) и U+E005 (английская) нужны
-       show-правилу, чтобы заменить «Doctoral dissertation» и «Master's
-       thesis», которые Typst подставляет для @phdthesis и @mastersthesis -->
+       show-правилу, чтобы заменить "Doctoral dissertation" и "Master's
+       thesis", которые Typst подставляет для @phdthesis и @mastersthesis -->
   <macro name="thesis-type">
     <choose>
       <if variable="language">
@@ -167,7 +167,7 @@
     </group>
   </macro>
 
-  <!-- «/ все авторы»: show-правило оставляет её только при двух и более
+  <!-- "/ все авторы": show-правило оставляет её только при двух и более
        авторах. U+E000 число U+E001 часть U+E002 -->
   <macro name="rest">
     <group>
@@ -192,8 +192,8 @@
     </group>
   </macro>
 
-  <!-- Редакторы. U+E003 заменяется на «/» или «;» в зависимости от того,
-       осталась ли перед ними часть «/ все авторы» -->
+  <!-- Редакторы. U+E003 заменяется на "/" или ";" в зависимости от того,
+       осталась ли перед ними часть "/ все авторы" -->
   <macro name="editors">
     <choose>
       <if variable="editor">
@@ -241,7 +241,7 @@
     </group>
   </macro>
 
-  <!-- Место и издательство; пропущенные заменяются на «[Б. м.]» и «[б. и.]» -->
+  <!-- Место и издательство; пропущенные заменяются на "[Б. м.]" и "[б. и.]" -->
   <macro name="place-publisher">
     <choose>
       <if variable="publisher-place">
@@ -288,7 +288,7 @@
   </macro>
 
   <!-- Примечание и адрес: после примечания адрес идёт через точку,
-       без примечания — через точку и тире -->
+       без примечания --- через точку и тире -->
   <macro name="note-url">
     <choose>
       <if variable="note">
@@ -328,7 +328,7 @@
       <choose>
         <!-- Статья в журнале -->
         <if type="article-journal article-magazine article-newspaper article" match="any">
-          <group delimiter=".&#160;— ">
+          <group delimiter=".&#160;--- ">
             <group>
               <text macro="head-title"/>
               <text macro="rest"/>
@@ -345,7 +345,7 @@
         </if>
         <!-- Доклад в трудах конференции -->
         <else-if type="paper-conference">
-          <group delimiter=".&#160;— ">
+          <group delimiter=".&#160;--- ">
             <group>
               <text macro="head-title"/>
               <text macro="rest"/>
@@ -364,7 +364,7 @@
         </else-if>
         <!-- Часть книги или сборника -->
         <else-if type="chapter entry-encyclopedia entry-dictionary" match="any">
-          <group delimiter=".&#160;— ">
+          <group delimiter=".&#160;--- ">
             <group>
               <text macro="head-title"/>
               <text macro="rest"/>
@@ -383,7 +383,7 @@
         </else-if>
         <!-- Диссертация, ВКР -->
         <else-if type="thesis">
-          <group delimiter=".&#160;— ">
+          <group delimiter=".&#160;--- ">
             <group>
               <text macro="head-title"/>
               <text macro="thesis-type" prefix="&#160;: "/>
@@ -398,7 +398,7 @@
         </else-if>
         <!-- Отчёт -->
         <else-if type="report">
-          <group delimiter=".&#160;— ">
+          <group delimiter=".&#160;--- ">
             <group>
               <text macro="title"/>
               <text variable="genre" prefix="&#160;: "/>
@@ -423,7 +423,7 @@
         <!-- Электронный ресурс -->
         <else-if type="webpage post post-weblog software dataset" match="any">
           <group delimiter=". ">
-            <group delimiter=".&#160;— ">
+            <group delimiter=".&#160;--- ">
               <group>
                 <text macro="head-title"/>
                 <text variable="container-title" prefix="&#160;// "/>
@@ -436,7 +436,7 @@
         </else-if>
         <!-- Книга и всё остальное -->
         <else>
-          <group delimiter=".&#160;— ">
+          <group delimiter=".&#160;--- ">
             <group delimiter=". ">
               <group>
                 <text macro="head-title"/>

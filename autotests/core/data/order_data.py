@@ -10,7 +10,7 @@ _fake = Faker("ru_RU")
 
 @dataclass(frozen=True)
 class ProductExpectation:
-    """Ожидаемые параметры целевого товара раздела «Линолеум»."""
+    """Ожидаемые параметры целевого товара раздела "Линолеум"."""
 
     search_query: str
     product_url: str

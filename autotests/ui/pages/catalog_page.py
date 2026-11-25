@@ -24,19 +24,19 @@ class CatalogPage(BasePage):
             "Ссылки товаров в результатах каталога/поиска",
         )
 
-    @allure.step("Открыть раздел каталога «Линолеум»")
+    @allure.step("Открыть раздел каталога "Линолеум"")
     def open_linoleum_catalog(self) -> "CatalogPage":
         self.open(self.settings.catalog_path)
         self.product_titles.wait_visible()
         return self
 
-    @allure.step("Найти товар по запросу «{query}»")
+    @allure.step("Найти товар по запросу "{query}"")
     def search_product(self, query: str) -> "CatalogPage":
         self.search(query)
         self.product_titles.wait_visible()
         return self
 
-    @allure.step("Проверить наличие товара «{expected_name}» в выдаче и открыть карточку")
+    @allure.step("Проверить наличие товара "{expected_name}" в выдаче и открыть карточку")
     def open_product_from_results(self, expected_name: str) -> ProductPage:
         matching = self.page.locator(
             f".catalog_item_wrapp .item-title a:has-text('{expected_name}')"

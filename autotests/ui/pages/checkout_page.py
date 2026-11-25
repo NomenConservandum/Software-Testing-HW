@@ -25,19 +25,19 @@ class CheckoutPage(BasePage):
         self.pickup_delivery_option = BaseElement(
             page,
             "#bx-soa-delivery .bx-soa-pp-company-item:has-text('Самовывоз')",
-            "Способ получения «Самовывоз»",
+            "Способ получения "Самовывоз"",
         )
         self.cod_payment_option = BaseElement(
             page,
             "#bx-soa-paysystem .bx-soa-pp-company-item:has-text('Наложенный платеж')",
-            "Способ оплаты «Наложенный платеж»",
+            "Способ оплаты "Наложенный платеж"",
         )
-        self.zip_input = BaseElement(page, "#zipProperty:visible", "Поле «Индекс»")
-        self.full_name_input = BaseElement(page, "#soa-property-1:visible", "Поле «Ф.И.О.»")
-        self.email_input = BaseElement(page, "#soa-property-2:visible", "Поле «E-Mail»")
-        self.phone_input = BaseElement(page, "#soa-property-3:visible", "Поле «Телефон»")
-        self.address_input = BaseElement(page, "#soa-property-7:visible", "Поле «Адрес доставки»")
-        self.comment_input = BaseElement(page, "#orderDescription:visible", "Поле «Комментарии к заказу»")
+        self.zip_input = BaseElement(page, "#zipProperty:visible", "Поле "Индекс"")
+        self.full_name_input = BaseElement(page, "#soa-property-1:visible", "Поле "Ф.И.О."")
+        self.email_input = BaseElement(page, "#soa-property-2:visible", "Поле "E-Mail"")
+        self.phone_input = BaseElement(page, "#soa-property-3:visible", "Поле "Телефон"")
+        self.address_input = BaseElement(page, "#soa-property-7:visible", "Поле "Адрес доставки"")
+        self.comment_input = BaseElement(page, "#orderDescription:visible", "Поле "Комментарии к заказу"")
         self.personal_data_checkbox = BaseElement(
             page,
             "#licenses_order",
@@ -61,7 +61,7 @@ class CheckoutPage(BasePage):
         self.submit_order_button = BaseElement(
             page,
             "#bx-soa-order a[data-save-button='true']:visible",
-            "Кнопка «Оформить заказ»",
+            "Кнопка "Оформить заказ"",
         )
         self.order_confirmation = BaseElement(
             page,
@@ -73,7 +73,7 @@ class CheckoutPage(BasePage):
         self.order_root.wait_visible()
         self.submit_order_button.wait_visible()
 
-    @allure.step("Выбрать получение «Самовывоз» и оплату «Наложенный платеж»")
+    @allure.step("Выбрать получение "Самовывоз" и оплату "Наложенный платеж"")
     def select_pickup_and_cod(self) -> "CheckoutPage":
         if self.pickup_delivery_option.is_visible():
             self.pickup_delivery_option.click()
@@ -82,7 +82,7 @@ class CheckoutPage(BasePage):
             self.cod_payment_option.click()
             self.page.wait_for_load_state("networkidle")
             cls = self.cod_payment_option.get_attribute("class") or ""
-            assert "bx-selected" in cls, f"Не удалось выбрать оплату «Наложенный платеж» (class={cls})"
+            assert "bx-selected" in cls, f"Не удалось выбрать оплату "Наложенный платеж" (class={cls})"
         return self
 
     @allure.step("Заполнить данные покупателя и отметить обязательные согласия")
@@ -117,7 +117,7 @@ class CheckoutPage(BasePage):
         self.submit_order_button.wait_visible()
         if not submit_enabled:
             log.info(
-                "E2E_SUBMIT_ORDER=false: форма полностью заполнена, кнопка «Оформить заказ» активна; отправка заказа пропущена"
+                "E2E_SUBMIT_ORDER=false: форма полностью заполнена, кнопка "Оформить заказ" активна; отправка заказа пропущена"
             )
             return None
 
